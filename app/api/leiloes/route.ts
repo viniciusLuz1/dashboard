@@ -1,0 +1,127 @@
+import { NextResponse } from "next/server";
+import { comCache } from "@/lib/cache";
+import {
+  buscarItensDosLeiloes,
+  buscarLeiloesEntre,
+  buscarProximoFuturo,
+  type Leilao,
+} from "@/lib/leiloes";
+import { agregarItens, classificar } from "@/lib/metricas";
+import {
+  FUSO,
+  agora,
+  fimDaSemana,
+  inicioDaSemana,
+  paraISOComOffset,
+} from "@/lib/tempo";
+
+/**
+ * O contrato desta rota é consumido pela TV e, na Fase 3, por um ESP32
+ * (M5StickC) parseando JSON com pouca memória. Por isso é PLANO: adicione
+ * chaves, não reestruture. As chaves "dia…" e "semana…" são a Fase 2 — a
+ * tela ignora por enquanto, de propósito.
+ */
+
+export const dynamic = "force-dynamic"; // o cache é nosso (TTL 60s), não do Next
+
+const TTL_MS = 60_000;
+
+/** Forma pública de um leilão no contrato — não vaza o resto do Notion. */
+type LeilaoAPI = {
+  id: string;
+  nome: string;
+  rc: string | null;
+  cidade: string | null;
+  horarioISO: string | null;
+  epochMs: number | null;
+  semHora: boolean;
+};
+
+const paraAPI = (leilao: Leilao): LeilaoAPI => ({
+  id: leilao.id,
+  nome: leilao.nome,
+  rc: leilao.rc,
+  cidade: leilao.cidade,
+  horarioISO: leilao.dataISO,
+  epochMs: leilao.epochMs,
+  semHora: leilao.semHora,
+});
+
+export async function GET() {
+  const agoraSP = agora();
+  const agoraMs = agoraSP.getTime();
+
+  try {
+    // A chave inclui a segunda-feira da semana: quando a semana vira, o
+    // cache da anterior é naturalmente abandonado.
+    const inicioSemana = inicioDaSemana(agoraMs);
+    const semana = await comCache(
+      `semana:${inicioSemana.toISOString()}`,
+      TTL_MS,
+      async () => {
+        const leiloes = await buscarLeiloesEntre(inicioSemana, fimDaSemana(agoraMs));
+        const itens = await buscarItensDosLeiloes(leiloes.map((leilao) => leilao.id));
+        return { leiloes, itens };
+      },
+    );
+
+    const { leiloes, itens } = semana.valor;
+    const classificacao = classificar(leiloes, agoraMs);
+
+    // Hoje acabou (ou nunca teve alvo de contagem)? Busca o próximo futuro
+    // de QUALQUER dia — pode estar fora da semana corrente. Falha aqui não
+    // derruba a resposta: o painel principal continua.
+    let proximo = classificacao.proximo;
+    const proximoEhDeHoje = proximo !== null;
+    if (!proximo) {
+      try {
+        const futuro = await comCache("proximo-futuro", TTL_MS, () =>
+          buscarProximoFuturo(agoraSP),
+        );
+        proximo = futuro.valor;
+      } catch {
+        proximo = null;
+      }
+    }
+
+    const leiloesPorId = new Map(leiloes.map((leilao) => [leilao.id, leilao]));
+    const { dia, semana: fase2Semana } = agregarItens(itens, leiloesPorId, agoraMs);
+
+    return NextResponse.json({
+      geradoEm: paraISOComOffset(agoraMs),
+      agoraEpochMs: agoraMs,
+      fuso: FUSO,
+
+      proximo: proximo ? paraAPI(proximo) : null,
+      proximoEhDeHoje,
+      proximosHoje: classificacao.proximosHoje.map(paraAPI),
+      realizadosHoje: classificacao.realizadosHoje,
+      realizadosSemana: classificacao.realizadosSemana,
+
+      // Fase 2 — camada de dados pronta, tela desligada de propósito.
+      diaItensGanhos: dia.itensGanhos,
+      diaFaturamento: dia.faturamento,
+      diaItensDisputados: dia.itensDisputados,
+      diaAproveitamento: dia.aproveitamento,
+      semanaItensGanhos: fase2Semana.itensGanhos,
+      semanaFaturamento: fase2Semana.faturamento,
+      semanaItensDisputados: fase2Semana.itensDisputados,
+      semanaAproveitamento: fase2Semana.aproveitamento,
+
+      /** Quando o Notion falhou e estes dados são o último valor válido. */
+      dadosDeEpochMs: semana.carregadoEm,
+      erro: semana.obsoleto
+        ? `Notion indisponível — exibindo dados de ${paraISOComOffset(semana.carregadoEm)}`
+        : null,
+    });
+  } catch (erro) {
+    // Nem cache antigo existe. A TV mostra o banner com o último dado que
+    // ELA guardou; aqui só se reporta a falha honestamente.
+    const mensagem = erro instanceof Error ? erro.message : String(erro);
+    console.error(`[api/leiloes] ${mensagem}`);
+    return NextResponse.json(
+      { geradoEm: paraISOComOffset(agoraMs), agoraEpochMs: agoraMs, erro: mensagem },
+      { status: 502 },
+    );
+  }
+}
