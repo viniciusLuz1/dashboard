@@ -29,6 +29,9 @@ describe("classificar", () => {
     leilao("tarde2", "2026-09-01T16:30:00-03:00"), // hoje, futuro (fora de ordem)
     leilao("tarde1", "2026-09-01T15:00:00-03:00"), // hoje, futuro
     leilaoSemHora("sem-hora-hoje", "2026-09-01"),
+    // Segunda desta semana, sem hora: nenhuma informação nova surge só
+    // porque o dia virou — não pode "resolver" sozinho para realizado.
+    leilaoSemHora("sem-hora-segunda", "2026-08-31"),
     leilao("ontem", "2026-08-31T10:00:00-03:00"),
     leilao("amanha", "2026-09-02T10:00:00-03:00"),
     leilao("sem-data", null),
@@ -58,6 +61,17 @@ describe("classificar", () => {
 
   it("realizados na semana: de segunda 00:00 SP até agora", () => {
     expect(resultado.realizadosSemana).toBe(2); // "ontem" (segunda) + "manha"
+  });
+
+  it("sem-hora de um dia PASSADO da semana também não conta como realizado", () => {
+    // Regressão: antes, a exclusão só valia para o sem-hora de HOJE — no dia
+    // seguinte ele "virava" realizado sozinho, sem nenhuma informação nova.
+    // Adicionar/remover esse registro não pode mudar a contagem da semana.
+    const semAsemHoraSegunda = classificar(
+      cenario.filter((l) => l.id !== "sem-hora-segunda"),
+      AGORA,
+    );
+    expect(resultado.realizadosSemana).toBe(semAsemHoraSegunda.realizadosSemana);
   });
 
   it("dia sem nada restante: lista vazia e proximo null", () => {

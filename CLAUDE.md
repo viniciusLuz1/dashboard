@@ -40,7 +40,10 @@ sempre resolva a partir do database.
   `/\d{8}/`; sem match, mostra o título inteiro.
 - **`Data` sem hora** (~5% dos registros) vem como date-only (`2026-09-04`,
   sem `T`). Esses aparecem como "horário não informado", fora da contagem
-  regressiva e dos alarmes.
+  regressiva, dos alarmes e **também fora de `realizadosHoje`/`realizadosSemana`
+  para sempre** — não só no dia em que aparecem. Passar a meia-noite não é
+  informação nova sobre se o pregão ocorreu; a exclusão em `lib/metricas.ts`
+  não pode depender de `deHoje`.
 - **`CIDADE` é suja** (60 variações de grafia). Fase 1: primeiro valor, cru.
 - **Fuso:** Vercel roda em UTC, Brasil é UTC-3. TODA lógica de
   hoje/semana/agora usa `America/Sao_Paulo` via `lib/tempo.ts`. Os testes de

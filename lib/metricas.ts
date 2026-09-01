@@ -29,11 +29,11 @@ export function classificar(leiloes: Leilao[], agoraMs: number): Classificacao {
 
   const deHoje = (leilao: { epochMs: number }) => mesmoDia(leilao.epochMs, agoraMs);
 
-  // Um date-only de hoje tem epoch = meia-noite (já "passou"), mas ainda está
-  // pendente aos olhos de quem trabalha: fica na lista e fora dos contadores
-  // de realizados até o dia virar.
+  // Sem hora, nunca se sabe se o pregão já ocorreu — não é só "hoje": um
+  // AGENDADO sem hora de segunda continua sem essa informação na terça.
+  // Mesma exclusão permanente que já vale para o alarme.
   const realizado = (leilao: Leilao & { epochMs: number }) =>
-    leilao.epochMs < agoraMs && !(leilao.semHora && deHoje(leilao));
+    leilao.epochMs < agoraMs && !leilao.semHora;
 
   const futurosComHora = comData
     .filter((leilao) => deHoje(leilao) && !leilao.semHora && leilao.epochMs >= agoraMs)
