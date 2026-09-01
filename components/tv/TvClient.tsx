@@ -55,24 +55,27 @@ export function TvClient() {
   const [audioAtivo, setAudioAtivo] = useState(false);
   const [mudo, setMudo] = useState(false);
 
+  /** Última resposta boa, no relógio do servidor — dispara o banner de silêncio. */
+  const [ultimoOkMs, setUltimoOkMs] = useState<number | null>(null);
+
   const dadosRef = useRef<RespostaAPI | null>(null);
   const audioRef = useRef<AudioContext | null>(null);
   const disparadosRef = useRef(new Set<string>());
   /** Diferença relógio servidor − relógio da TV, medida a cada fetch. */
   const desvioRef = useRef(0);
-  const ultimoOkRef = useRef<number | null>(null);
+  const demoRef = useRef<LeilaoTV | null>(null);
 
   const agoraCorrigido = useCallback(
     () => Date.now() + desvioRef.current,
     [],
   );
 
-  /**
-   * Modo de teste na parede: /tv?demo=90 injeta um pregão falso daqui a 90s
-   * para conferir contagem, mudança visual e os dois alarmes com a TV real.
-   */
-  const demoRef = useRef<LeilaoTV | null>(null);
-  if (demoRef.current === null && typeof window !== "undefined") {
+  // ── Fetch a cada 60s ──
+  useEffect(() => {
+    let ativo = true;
+
+    // Modo de teste na parede: /tv?demo=90 injeta um pregão falso daqui a
+    // 90s para conferir contagem, mudança visual e os dois alarmes na TV real.
     const segundos = Number(
       new URLSearchParams(window.location.search).get("demo"),
     );
@@ -88,11 +91,6 @@ export function TvClient() {
         semHora: false,
       };
     }
-  }
-
-  // ── Fetch a cada 60s ──
-  useEffect(() => {
-    let ativo = true;
 
     async function buscar() {
       try {
@@ -103,7 +101,7 @@ export function TvClient() {
           throw new Error(corpo.erro ?? `HTTP ${resposta.status}`);
         }
         desvioRef.current = corpo.agoraEpochMs - Date.now();
-        ultimoOkRef.current = Date.now();
+        setUltimoOkMs(corpo.agoraEpochMs);
         if (demoRef.current) {
           corpo.proximosHoje = [...corpo.proximosHoje, demoRef.current];
         }
@@ -224,8 +222,8 @@ export function TvClient() {
     faltamMs !== null && faltamMs <= DEZ_MIN_MS && visao.heroEhDeHoje;
   const agoraMesmo = faltamMs !== null && faltamMs <= 0;
 
-  const silencioMs =
-    ultimoOkRef.current === null ? 0 : Date.now() - ultimoOkRef.current;
+  // agoraMs e ultimoOkMs estão ambos no relógio do servidor — comparáveis.
+  const silencioMs = ultimoOkMs === null ? 0 : agoraMs - ultimoOkMs;
   const problema =
     falhaFetch ?? dados.erro ?? (silencioMs > LIMITE_SILENCIO_MS ? "sem resposta da API" : null);
 
@@ -235,10 +233,10 @@ export function TvClient() {
 
   return (
     <main className={`tv${emAlerta ? " tv--alerta" : ""}`}>
-      {problema && ultimoOkRef.current !== null && (
+      {problema && ultimoOkMs !== null && (
         <div className="banner-erro" role="alert">
-          DADOS DESATUALIZADOS — última atualização às{" "}
-          {horaSP.format(ultimoOkRef.current)} ({problema})
+          DADOS DESATUALIZADOS — última atualização às {horaSP.format(ultimoOkMs)}{" "}
+          ({problema})
         </div>
       )}
 
