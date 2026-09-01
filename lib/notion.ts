@@ -1,4 +1,4 @@
-import { Client, extractNotionId } from "@notionhq/client";
+import { Client, extractNotionId, isFullDatabase } from "@notionhq/client";
 
 /**
  * Único ponto de contato com o SDK do Notion. O token só existe no processo
@@ -42,7 +42,10 @@ export async function dataSourceId(base: BaseConhecida): Promise<string> {
   const database = await notion().databases.retrieve({
     database_id: databaseId,
   });
-  const primeira = database.data_sources?.[0];
+  // A resposta parcial não traz data_sources — o guard estreita o tipo.
+  const primeira = isFullDatabase(database)
+    ? database.data_sources[0]
+    : undefined;
   if (!primeira?.id) {
     throw new Error(
       `A database de ${base} não expôs nenhuma data source — confira se a integração tem acesso a ela no Notion (menu ··· → Conexões).`,
