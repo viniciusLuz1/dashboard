@@ -36,6 +36,8 @@ type RespostaAPI = DadosTV & {
   semanaFaturamento: number;
   semanaItensDisputados: number;
   semanaAproveitamento: number;
+  /** Pedidos de compra chegados na semana (Supabase) — ver components/tv/Placar.tsx. */
+  semanaFaturamentoReal: number | null;
 };
 
 const FETCH_MS = 60_000;
@@ -285,9 +287,9 @@ export function TvClient() {
           diaItensDisputados={dados.diaItensDisputados}
           diaAproveitamento={dados.diaAproveitamento}
           semanaItensGanhos={dados.semanaItensGanhos}
-          semanaFaturamento={dados.semanaFaturamento}
           semanaItensDisputados={dados.semanaItensDisputados}
           semanaAproveitamento={dados.semanaAproveitamento}
+          semanaFaturamentoReal={dados.semanaFaturamentoReal}
         />
       ) : (
         <>

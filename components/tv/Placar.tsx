@@ -10,9 +10,10 @@ export type PlacarProps = {
   diaItensDisputados: number;
   diaAproveitamento: number;
   semanaItensGanhos: number;
-  semanaFaturamento: number;
   semanaItensDisputados: number;
   semanaAproveitamento: number;
+  /** Pedidos de compra chegados na semana (Supabase) — não o valor GANHO no leilão. null = origem indisponível. */
+  semanaFaturamentoReal: number | null;
 };
 
 const brl = new Intl.NumberFormat("pt-BR", {
@@ -26,7 +27,8 @@ const pct = (razao: number): string => `${Math.round(razao * 100)}%`;
 type ColunaProps = {
   periodo: string;
   itensGanhos: number;
-  faturamento: number;
+  faturamentoRotulo: string;
+  faturamento: number | null;
   itensDisputados: number;
   aproveitamento: number;
 };
@@ -34,6 +36,7 @@ type ColunaProps = {
 function Coluna({
   periodo,
   itensGanhos,
+  faturamentoRotulo,
   faturamento,
   itensDisputados,
   aproveitamento,
@@ -46,8 +49,8 @@ function Coluna({
         <p className="placar__rotulo">itens ganhos</p>
       </div>
       <div className="placar__stat">
-        <p className="placar__valor">{brl.format(faturamento)}</p>
-        <p className="placar__rotulo">faturamento</p>
+        <p className="placar__valor">{faturamento === null ? "—" : brl.format(faturamento)}</p>
+        <p className="placar__rotulo">{faturamentoRotulo}</p>
       </div>
       <div className="placar__stat">
         <p className="placar__valor">{pct(aproveitamento)}</p>
@@ -67,6 +70,7 @@ export function Placar(props: PlacarProps) {
         <Coluna
           periodo="HOJE"
           itensGanhos={props.diaItensGanhos}
+          faturamentoRotulo="faturamento"
           faturamento={props.diaFaturamento}
           itensDisputados={props.diaItensDisputados}
           aproveitamento={props.diaAproveitamento}
@@ -74,7 +78,8 @@ export function Placar(props: PlacarProps) {
         <Coluna
           periodo="SEMANA"
           itensGanhos={props.semanaItensGanhos}
-          faturamento={props.semanaFaturamento}
+          faturamentoRotulo="faturamento (pedidos)"
+          faturamento={props.semanaFaturamentoReal}
           itensDisputados={props.semanaItensDisputados}
           aproveitamento={props.semanaAproveitamento}
         />

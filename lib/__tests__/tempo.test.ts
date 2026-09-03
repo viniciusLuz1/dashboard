@@ -5,6 +5,7 @@ import {
   inicioDaSemana,
   inicioDoDia,
   mesmoDia,
+  paraDataSP,
   paraISOComOffset,
 } from "../tempo";
 
@@ -70,5 +71,11 @@ describe("paraISOComOffset", () => {
     expect(paraISOComOffset(TERCA_22H_BRT)).toBe(
       "2026-09-01T22:00:00.000-03:00",
     );
+  });
+});
+
+describe("paraDataSP", () => {
+  it("22h BRT ainda é o dia de SP, não o de UTC (já é dia seguinte lá)", () => {
+    expect(paraDataSP(TERCA_22H_BRT)).toBe("2026-09-01");
   });
 });

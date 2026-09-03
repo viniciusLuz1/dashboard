@@ -12,9 +12,11 @@ disputa. Adjudicação é **por item**: uma RC com 8 itens pode render 3 ganhos.
 
 ## Stack
 
-Next.js (App Router) + TypeScript, deploy Vercel. Sem banco (lê o Notion
-com cache de 60s no servidor), sem auth (URL obscura). Datas com
-`date-fns` v4 + `@date-fns/tz` (`TZDate`). Testes com vitest (`npm test`).
+Next.js (App Router) + TypeScript, deploy Vercel. Lê o Notion (cache de 60s
+no servidor) e, para um único número (faturamento real da semana), o
+Supabase de outro sistema — ver "Faturamento real" abaixo. Sem auth (URL
+obscura). Datas com `date-fns` v4 + `@date-fns/tz` (`TZDate`). Testes com
+vitest (`npm test`).
 
 ## Dados no Notion
 
@@ -27,6 +29,31 @@ A API 2025-09-03 do Notion consulta **data sources**, não databases.
 `lib/notion.ts` resolve `database → primeira data source` e cacheia em memória.
 Os IDs de data source acima são os observados em produção — não os hardcode;
 sempre resolva a partir do database.
+
+## Faturamento real (pedidos-internos, Supabase)
+
+O que foi **GANHO** no leilão (Notion) diverge do que foi **autorizado** pelo
+cliente — nem todo item ganho vira pedido de compra, e o valor autorizado
+pode ser menor que o disputado. Por isso o placar da SEMANA não usa
+`agregarItens`/Fase 2 para faturamento: usa `lib/pedidos.ts`, que soma
+`valor_pedido` da tabela `pedidos` (Supabase do app irmão
+[pedidos-internos](https://github.com/viniciusLuz1/pedidos-internos), lançada
+manualmente pela equipe) filtrando por `data_chegada` (data em que a
+autorização chegou) dentro da semana corrente.
+
+- Env: `PEDIDOS_SUPABASE_URL`, `PEDIDOS_SUPABASE_SERVICE_ROLE_KEY` (não a
+  `anon` — a RLS de lá só libera SELECT para `authenticated`; sem
+  `service_role` a leitura vem vazia/erro, não vem negada de forma óbvia).
+- **Sem join com RC/leilão.** `numero_pedido` é o número do pedido do
+  cliente (ex. `"4501964374"`), formato sem relação com a RC de 8 dígitos
+  usada no resto do painel. A soma é por período (`data_chegada`), não por
+  leilão — não tente casar um `pedido` com um `Leilao` específico.
+  `itensGanhos`/`aproveitamento` continuam vindo do leilão normalmente; só
+  o número de faturamento da SEMANA trocou de fonte. O de HOJE continua
+  sendo a estimativa do leilão (decisão consciente: chegada de pedido tem
+  atraso de dias, "hoje" quase sempre estaria vazio).
+- `semanaFaturamentoReal` é `null` (não `0`) quando o Supabase falha — a
+  tela mostra "—", nunca inventa um valor.
 
 ## Pegadinhas aprendidas com dados reais (não rediscutir, foi observado)
 
@@ -53,10 +80,11 @@ sempre resolva a partir do database.
 
 - **Fase 1 (feita aqui):** lista do dia, contagem regressiva, alarmes
   T-10/T-0, contadores de hoje/semana.
-- **Fase 2 (só camada de dados):** agregações de itens ganhos/faturamento já
-  calculadas e expostas em `/api/leiloes` (chaves `dia*`/`semana*`). A tela
-  ignora de propósito — 22 itens ainda não sustentam um placar. Ligar a
-  Fase 2 = mudança de tela, não refatoração.
+- **Fase 2 (ligada):** placar (`components/tv/Placar.tsx`) revezando com a
+  contagem na tela `/tv` — itens ganhos/aproveitamento vêm do leilão
+  (`agregarItens`, chaves `dia*`/`semana*` de `/api/leiloes`); faturamento da
+  SEMANA vem de pedidos reais (ver "Faturamento real" acima), o de HOJE
+  continua sendo a estimativa do leilão.
 - **Fase 3 (não implementada):** um ESP32 (M5StickC) vai consumir
   `/api/leiloes`. Por isso o JSON é plano — mudanças no contrato quebram o
   microcontrolador; adicione chaves, não reestruture.

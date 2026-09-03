@@ -1,5 +1,5 @@
 import { TZDate } from "@date-fns/tz";
-import { endOfDay, endOfWeek, startOfDay, startOfWeek } from "date-fns";
+import { endOfDay, endOfWeek, format, startOfDay, startOfWeek } from "date-fns";
 
 /**
  * Todo cálculo de "hoje", "semana" e "agora" passa por aqui, resolvido em
@@ -42,3 +42,7 @@ export const mesmoDia = (a: Instante, b: Instante): boolean =>
 /** ISO 8601 com offset (-03:00) — formato que o filtro de data do Notion aceita. */
 export const paraISOComOffset = (instante: Instante): string =>
   emSaoPaulo(instante).toISOString();
+
+/** "YYYY-MM-DD" do dia de `ref` em São Paulo — para comparar com colunas `date` (sem hora) de outros sistemas, ex. Supabase. */
+export const paraDataSP = (ref: Instante): string =>
+  format(emSaoPaulo(ref), "yyyy-MM-dd");

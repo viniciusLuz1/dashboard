@@ -7,11 +7,13 @@ import {
   type Leilao,
 } from "@/lib/leiloes";
 import { agregarItens, classificar } from "@/lib/metricas";
+import { buscarFaturamentoPedidosChegados } from "@/lib/pedidos";
 import {
   FUSO,
   agora,
   fimDaSemana,
   inicioDaSemana,
+  paraDataSP,
   paraISOComOffset,
 } from "@/lib/tempo";
 
@@ -91,6 +93,24 @@ export async function GET() {
     const leiloesPorId = new Map(leiloes.map((leilao) => [leilao.id, leilao]));
     const { dia, semana: fase2Semana } = agregarItens(itens, leiloesPorId, agoraMs);
 
+    // Faturamento real da semana: soma de pedidos de compra chegados (outro
+    // sistema, Supabase) — não é o valor GANHO no leilão, é o que o cliente
+    // de fato autorizou. null quando a origem falhou (a tela mostra "—", não
+    // inventa zero). Cache próprio: falha aqui não derruba o painel principal.
+    let semanaFaturamentoReal: number | null = null;
+    try {
+      const inicioSemanaData = paraDataSP(inicioSemana);
+      const fimSemanaData = paraDataSP(fimDaSemana(agoraMs));
+      const real = await comCache(
+        `pedidos-semana:${inicioSemanaData}`,
+        TTL_MS,
+        () => buscarFaturamentoPedidosChegados(inicioSemanaData, fimSemanaData),
+      );
+      semanaFaturamentoReal = real.valor;
+    } catch {
+      semanaFaturamentoReal = null;
+    }
+
     return NextResponse.json({
       geradoEm: paraISOComOffset(agoraMs),
       agoraEpochMs: agoraMs,
@@ -113,6 +133,8 @@ export async function GET() {
       semanaFaturamento: fase2Semana.faturamento,
       semanaItensDisputados: fase2Semana.itensDisputados,
       semanaAproveitamento: fase2Semana.aproveitamento,
+      /** Faturamento real da semana (pedidos de compra chegados) — ver comentário acima. null = origem indisponível. */
+      semanaFaturamentoReal,
 
       /** Quando o Notion falhou e estes dados são o último valor válido. */
       dadosDeEpochMs: semana.carregadoEm,
