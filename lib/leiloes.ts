@@ -136,18 +136,32 @@ export async function buscarLeiloesEntre(
   return paginas.filter(ehPaginaCompleta).map((pagina) => parseLeilao(pagina as PaginaNotion));
 }
 
-/** O primeiro leilão com Data >= aPartirDe — para quando hoje já acabou. */
-export async function buscarProximoFuturo(aPartirDe: Date): Promise<Leilao | null> {
+/**
+ * Os próximos `limite` leilões COM HORA a partir de aPartirDe, cruzando dias
+ * — usado quando hoje já acabou e para a lista "próximos" da tela, que sem
+ * isso perderia empates no mesmo horário (dois leilões marcados para 9:30 de
+ * amanhã: sem este cruzamento, só o primeiro do sort do Notion apareceria).
+ * Sem-hora é excluído porque sua Data (meia-noite) não tem valor cronológico
+ * real — a página inteira quase sempre já passou "on_or_after" o instante
+ * consultado, então busca-se uma folga (2×limite) antes de filtrar e cortar.
+ */
+export async function buscarProximosFuturos(
+  aPartirDe: Date,
+  limite: number,
+): Promise<Leilao[]> {
   const fonte = await dataSourceId("NOTION_DB_LEILOES");
   const resposta = await notion().dataSources.query({
     data_source_id: fonte,
     filter: { property: "Data", date: { on_or_after: paraISOComOffset(aPartirDe) } },
     sorts: [{ property: "Data", direction: "ascending" }],
-    page_size: 1,
+    page_size: limite * 2,
   });
 
-  const pagina = resposta.results.find(ehPaginaCompleta);
-  return pagina ? parseLeilao(pagina as PaginaNotion) : null;
+  return resposta.results
+    .filter(ehPaginaCompleta)
+    .map((pagina) => parseLeilao(pagina as PaginaNotion))
+    .filter((leilao) => !leilao.semHora)
+    .slice(0, limite);
 }
 
 /** Itens cujo Leilão está entre os IDs dados (Fase 2). Chunks de 100 — limite de condições do filtro composto. */

@@ -145,7 +145,7 @@ body {
 }
 
 .lista__hora {
-  flex: 0 0 7vw;
+  flex: 0 0 10vw; /* cabe "sex. 09:30" quando o item não é de hoje */
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   color: var(--acento);

@@ -19,6 +19,8 @@ export type DadosTV = {
   proximo: LeilaoTV | null;
   proximoEhDeHoje: boolean;
   proximosHoje: LeilaoTV[];
+  /** Próximos com hora cruzando dias — pega empates no mesmo horário que "proximo" sozinho esconde. */
+  proximos: LeilaoTV[];
   realizadosHoje: number;
   realizadosSemana: number;
 };
@@ -42,6 +44,8 @@ export type Visao = {
 export const CARENCIA_POS_T0_MS = 60_000;
 
 export function derivarVisao(dados: DadosTV, agoraMs: number): Visao {
+  // Contadores e alarme só olham para "hoje" — isso não muda com a lista
+  // cruzando dias, por isso continua vindo só de proximosHoje.
   const comHora = dados.proximosHoje.filter(
     (leilao): leilao is LeilaoTV & { epochMs: number } =>
       !leilao.semHora && leilao.epochMs !== null,
@@ -57,10 +61,24 @@ export function derivarVisao(dados: DadosTV, agoraMs: number): Visao {
   const hero =
     heroDeHoje ?? (!dados.proximoEhDeHoje ? dados.proximo : null);
 
+  // Lista: o resto de hoje primeiro (fonte sem limite, nunca perde nada do
+  // dia), completado pelos próximos cruzando dias — cobre empates no mesmo
+  // horário e dá visibilidade do que vem depois de hoje. Dedup por id.
+  const restanteHoje = pendentes.slice(1);
+  const idsNaLista = new Set([hero?.id, ...restanteHoje.map((l) => l.id)]);
+  const restanteFuturo = dados.proximos
+    .filter(
+      (leilao): leilao is LeilaoTV & { epochMs: number } =>
+        leilao.epochMs !== null &&
+        leilao.epochMs + CARENCIA_POS_T0_MS > agoraMs &&
+        !idsNaLista.has(leilao.id),
+    )
+    .sort((a, b) => a.epochMs - b.epochMs);
+
   return {
     hero,
     heroEhDeHoje: heroDeHoje !== null,
-    lista: [...pendentes.slice(1), ...semHora],
+    lista: [...restanteHoje, ...restanteFuturo, ...semHora],
     realizadosHoje: dados.realizadosHoje + passadosDesdeFetch,
     realizadosSemana: dados.realizadosSemana + passadosDesdeFetch,
     alarmaveis:

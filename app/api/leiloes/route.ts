@@ -3,7 +3,7 @@ import { comCache } from "@/lib/cache";
 import {
   buscarItensDosLeiloes,
   buscarLeiloesEntre,
-  buscarProximoFuturo,
+  buscarProximosFuturos,
   type Leilao,
 } from "@/lib/leiloes";
 import { agregarItens, classificar } from "@/lib/metricas";
@@ -25,6 +25,8 @@ import {
 export const dynamic = "force-dynamic"; // o cache é nosso (TTL 60s), não do Next
 
 const TTL_MS = 60_000;
+/** Quantos leilões futuros (com hora, cruzando dias) a lista "próximos" leva. */
+const LIMITE_PROXIMOS = 6;
 
 /** Forma pública de um leilão no contrato — não vaza o resto do Notion. */
 type LeilaoAPI = {
@@ -68,21 +70,23 @@ export async function GET() {
     const { leiloes, itens } = semana.valor;
     const classificacao = classificar(leiloes, agoraMs);
 
-    // Hoje acabou (ou nunca teve alvo de contagem)? Busca o próximo futuro
-    // de QUALQUER dia — pode estar fora da semana corrente. Falha aqui não
-    // derruba a resposta: o painel principal continua.
-    let proximo = classificacao.proximo;
+    const proximo = classificacao.proximo;
     const proximoEhDeHoje = proximo !== null;
-    if (!proximo) {
-      try {
-        const futuro = await comCache("proximo-futuro", TTL_MS, () =>
-          buscarProximoFuturo(agoraSP),
-        );
-        proximo = futuro.valor;
-      } catch {
-        proximo = null;
-      }
+
+    // Próximos leilões cruzando dias — alimenta a lista da tela (pega
+    // empates no mesmo horário que "proximo" sozinho esconderia) e também
+    // serve de reserva de "proximo" quando hoje já acabou. Falha aqui não
+    // derruba a resposta: o painel principal continua.
+    let proximos: Leilao[] = [];
+    try {
+      const futuros = await comCache("proximos-futuros", TTL_MS, () =>
+        buscarProximosFuturos(agoraSP, LIMITE_PROXIMOS),
+      );
+      proximos = futuros.valor;
+    } catch {
+      proximos = [];
     }
+    const proximoResolvido = proximo ?? proximos[0] ?? null;
 
     const leiloesPorId = new Map(leiloes.map((leilao) => [leilao.id, leilao]));
     const { dia, semana: fase2Semana } = agregarItens(itens, leiloesPorId, agoraMs);
@@ -92,9 +96,11 @@ export async function GET() {
       agoraEpochMs: agoraMs,
       fuso: FUSO,
 
-      proximo: proximo ? paraAPI(proximo) : null,
+      proximo: proximoResolvido ? paraAPI(proximoResolvido) : null,
       proximoEhDeHoje,
       proximosHoje: classificacao.proximosHoje.map(paraAPI),
+      /** Próximos com hora cruzando dias (Fase 1.1) — alimenta a lista abaixo do contador. */
+      proximos: proximos.map(paraAPI),
       realizadosHoje: classificacao.realizadosHoje,
       realizadosSemana: classificacao.realizadosSemana,
 

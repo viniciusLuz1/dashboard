@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { verificarAlarmes } from "@/lib/alarmes";
-import { FUSO, inicioDoDia } from "@/lib/tempo";
+import { FUSO, inicioDoDia, mesmoDia } from "@/lib/tempo";
 import {
   derivarVisao,
   formatarContagem,
@@ -42,11 +42,19 @@ const diaSP = new Intl.DateTimeFormat("pt-BR", {
   day: "2-digit",
   month: "2-digit",
 });
+const diaAbrevSP = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: FUSO,
+  weekday: "short",
+});
 
-const formatarHora = (leilao: LeilaoTV): string =>
-  leilao.semHora || leilao.epochMs === null
-    ? "—:—"
-    : horaSP.format(leilao.epochMs);
+/** Na lista, itens de outro dia (não hoje) levam o dia da semana na frente — sem isso, um "09:30" de amanhã se confunde com um de hoje. */
+const formatarHora = (leilao: LeilaoTV, agoraMs: number): string => {
+  if (leilao.semHora || leilao.epochMs === null) return "—:—";
+  const hora = horaSP.format(leilao.epochMs);
+  return mesmoDia(leilao.epochMs, agoraMs)
+    ? hora
+    : `${diaAbrevSP.format(leilao.epochMs)} ${hora}`;
+};
 
 export function TvClient() {
   const [dados, setDados] = useState<RespostaAPI | null>(null);
@@ -277,7 +285,7 @@ export function TvClient() {
           <ul>
             {listaVisivel.map((leilao) => (
               <li key={leilao.id}>
-                <span className="lista__hora">{formatarHora(leilao)}</span>
+                <span className="lista__hora">{formatarHora(leilao, agoraMs)}</span>
                 {/* O nome já carrega a RC embutida — prefixá-la duplicaria. */}
                 <span className="lista__nome">{leilao.nome}</span>
                 <span className="lista__cidade">

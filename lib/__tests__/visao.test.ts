@@ -19,6 +19,7 @@ const dados = (parcial: Partial<DadosTV>): DadosTV => ({
   proximo: null,
   proximoEhDeHoje: true,
   proximosHoje: [],
+  proximos: [],
   realizadosHoje: 2,
   realizadosSemana: 5,
   ...parcial,
@@ -70,6 +71,43 @@ describe("derivarVisao", () => {
     const visao = derivarVisao(dados({ proximo: null, proximoEhDeHoje: false }), T);
     expect(visao.hero).toBeNull();
     expect(visao.lista).toEqual([]);
+  });
+
+  it("empate no mesmo horário de amanhã: o que não virou hero aparece na lista", () => {
+    const amanha1 = leilao("papelaria", T + min(60 * 20));
+    const amanha2 = leilao("mesa-trabalho", T + min(60 * 20)); // mesmo horário
+    const amanha3 = leilao("carimbo", T + min(60 * 21));
+    const visao = derivarVisao(
+      dados({
+        proximo: amanha2,
+        proximoEhDeHoje: false,
+        proximosHoje: [],
+        proximos: [amanha1, amanha2, amanha3],
+      }),
+      T,
+    );
+    expect(visao.hero?.id).toBe("mesa-trabalho");
+    // O empate (papelaria) e o seguinte (carimbo) não somem da tela.
+    expect(visao.lista.map((l) => l.id)).toEqual(["papelaria", "carimbo"]);
+    // Só o hero é alarmável — os outros da lista não disparam T-10/T-0.
+    expect(visao.alarmaveis.map((l) => l.id)).toEqual(["mesa-trabalho"]);
+  });
+
+  it("hoje ainda tem itens: lista completa com hoje primeiro, depois cruzando dias, sem duplicar", () => {
+    const b = leilao("b", T + min(30));
+    const amanha = leilao("amanha", T + min(60 * 20));
+    const visao = derivarVisao(
+      dados({
+        proximo: leilao("a", T),
+        proximoEhDeHoje: true,
+        proximosHoje: [leilao("a", T), b],
+        // "a" e "b" também vêm do cross-day (é o mesmo Notion, mesma janela) — não deve duplicar.
+        proximos: [leilao("a", T), b, amanha],
+      }),
+      T - min(20),
+    );
+    expect(visao.hero?.id).toBe("a");
+    expect(visao.lista.map((l) => l.id)).toEqual(["b", "amanha"]);
   });
 });
 
