@@ -1,5 +1,14 @@
 import { TZDate } from "@date-fns/tz";
-import { endOfDay, endOfWeek, format, startOfDay, startOfWeek } from "date-fns";
+import {
+  endOfDay,
+  endOfMonth,
+  endOfWeek,
+  format,
+  startOfDay,
+  startOfMonth,
+  startOfWeek,
+  subMonths,
+} from "date-fns";
 
 /**
  * Todo cálculo de "hoje", "semana" e "agora" passa por aqui, resolvido em
@@ -38,6 +47,15 @@ export const fimDaSemana = (ref: Instante): TZDate =>
 /** `a` e `b` caem no mesmo dia-calendário de São Paulo? */
 export const mesmoDia = (a: Instante, b: Instante): boolean =>
   inicioDoDia(a).getTime() === inicioDoDia(b).getTime();
+
+/** Dia 1, 00:00:00.000 do mês de `ref`, horário de São Paulo. */
+export const inicioDoMes = (ref: Instante): TZDate => startOfMonth(emSaoPaulo(ref));
+
+/** Último dia do mês de `ref`, 23:59:59.999, horário de São Paulo. */
+export const fimDoMes = (ref: Instante): TZDate => endOfMonth(emSaoPaulo(ref));
+
+/** Um instante dentro do mês anterior ao de `ref` — combine com inicioDoMes/fimDoMes. */
+export const mesAnterior = (ref: Instante): TZDate => subMonths(emSaoPaulo(ref), 1);
 
 /** ISO 8601 com offset (-03:00) — formato que o filtro de data do Notion aceita. */
 export const paraISOComOffset = (instante: Instante): string =>

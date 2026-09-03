@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   fimDaSemana,
   fimDoDia,
+  fimDoMes,
   inicioDaSemana,
   inicioDoDia,
+  inicioDoMes,
+  mesAnterior,
   mesmoDia,
   paraDataSP,
   paraISOComOffset,
@@ -77,5 +80,27 @@ describe("paraISOComOffset", () => {
 describe("paraDataSP", () => {
   it("22h BRT ainda é o dia de SP, não o de UTC (já é dia seguinte lá)", () => {
     expect(paraDataSP(TERCA_22H_BRT)).toBe("2026-09-01");
+  });
+});
+
+describe("inicioDoMes / fimDoMes / mesAnterior", () => {
+  it("dia 1 00:00 até o último dia 23:59:59.999, horário de SP", () => {
+    expect(inicioDoMes(TERCA_22H_BRT).toISOString()).toBe(
+      "2026-09-01T00:00:00.000-03:00",
+    );
+    expect(fimDoMes(TERCA_22H_BRT).toISOString()).toBe(
+      "2026-09-30T23:59:59.999-03:00",
+    );
+  });
+
+  it("mês anterior de janeiro é dezembro do ano anterior (virada de ano)", () => {
+    const JAN_15_SP = Date.parse("2026-01-15T12:00:00-03:00");
+    expect(paraDataSP(mesAnterior(JAN_15_SP))).toBe("2025-12-15");
+    expect(inicioDoMes(mesAnterior(JAN_15_SP)).toISOString()).toBe(
+      "2025-12-01T00:00:00.000-03:00",
+    );
+    expect(fimDoMes(mesAnterior(JAN_15_SP)).toISOString()).toBe(
+      "2025-12-31T23:59:59.999-03:00",
+    );
   });
 });

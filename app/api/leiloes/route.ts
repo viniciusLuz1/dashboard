@@ -12,7 +12,10 @@ import {
   FUSO,
   agora,
   fimDaSemana,
+  fimDoMes,
   inicioDaSemana,
+  inicioDoMes,
+  mesAnterior,
   paraDataSP,
   paraISOComOffset,
 } from "@/lib/tempo";
@@ -50,6 +53,22 @@ const paraAPI = (leilao: Leilao): LeilaoAPI => ({
   epochMs: leilao.epochMs,
   semHora: leilao.semHora,
 });
+
+/** Soma de pedidos chegados no período, cacheada; null (nunca lança) quando a origem falha. */
+async function faturamentoPedidosOuNulo(
+  chaveCache: string,
+  inicioISO: string,
+  fimISO: string,
+): Promise<number | null> {
+  try {
+    const resultado = await comCache(chaveCache, TTL_MS, () =>
+      buscarFaturamentoPedidosChegados(inicioISO, fimISO),
+    );
+    return resultado.valor;
+  } catch {
+    return null;
+  }
+}
 
 export async function GET() {
   const agoraSP = agora();
@@ -93,23 +112,38 @@ export async function GET() {
     const leiloesPorId = new Map(leiloes.map((leilao) => [leilao.id, leilao]));
     const { dia, semana: fase2Semana } = agregarItens(itens, leiloesPorId, agoraMs);
 
-    // Faturamento real da semana: soma de pedidos de compra chegados (outro
-    // sistema, Supabase) — não é o valor GANHO no leilão, é o que o cliente
-    // de fato autorizou. null quando a origem falhou (a tela mostra "—", não
-    // inventa zero). Cache próprio: falha aqui não derruba o painel principal.
-    let semanaFaturamentoReal: number | null = null;
-    try {
-      const inicioSemanaData = paraDataSP(inicioSemana);
-      const fimSemanaData = paraDataSP(fimDaSemana(agoraMs));
-      const real = await comCache(
-        `pedidos-semana:${inicioSemanaData}`,
-        TTL_MS,
-        () => buscarFaturamentoPedidosChegados(inicioSemanaData, fimSemanaData),
-      );
-      semanaFaturamentoReal = real.valor;
-    } catch {
-      semanaFaturamentoReal = null;
-    }
+    // Faturamento real (semana / mês / mês anterior): soma de pedidos de
+    // compra chegados (outro sistema, Supabase) — não é o valor GANHO no
+    // leilão, é o que o cliente de fato autorizou. null quando a origem
+    // falha (a tela mostra "—", não inventa zero); cada período tem cache
+    // próprio e falha isolada — nenhum derruba o painel principal.
+    const mesAtualRef = agoraMs;
+    const mesAnteriorRef = mesAnterior(agoraMs).getTime();
+    const inicioSemanaData = paraDataSP(inicioSemana);
+    const fimSemanaData = paraDataSP(fimDaSemana(agoraMs));
+    const inicioMesData = paraDataSP(inicioDoMes(mesAtualRef));
+    const fimMesData = paraDataSP(fimDoMes(mesAtualRef));
+    const inicioMesAnteriorData = paraDataSP(inicioDoMes(mesAnteriorRef));
+    const fimMesAnteriorData = paraDataSP(fimDoMes(mesAnteriorRef));
+
+    const [semanaFaturamentoReal, mesFaturamentoReal, mesAnteriorFaturamentoReal] =
+      await Promise.all([
+        faturamentoPedidosOuNulo(
+          `pedidos-semana:${inicioSemanaData}`,
+          inicioSemanaData,
+          fimSemanaData,
+        ),
+        faturamentoPedidosOuNulo(
+          `pedidos-mes:${inicioMesData.slice(0, 7)}`,
+          inicioMesData,
+          fimMesData,
+        ),
+        faturamentoPedidosOuNulo(
+          `pedidos-mes-anterior:${inicioMesAnteriorData.slice(0, 7)}`,
+          inicioMesAnteriorData,
+          fimMesAnteriorData,
+        ),
+      ]);
 
     return NextResponse.json({
       geradoEm: paraISOComOffset(agoraMs),
@@ -133,8 +167,12 @@ export async function GET() {
       semanaFaturamento: fase2Semana.faturamento,
       semanaItensDisputados: fase2Semana.itensDisputados,
       semanaAproveitamento: fase2Semana.aproveitamento,
-      /** Faturamento real da semana (pedidos de compra chegados) — ver comentário acima. null = origem indisponível. */
+      // Faturamento real (pedidos de compra chegados) — ver comentário acima. null = origem indisponível.
       semanaFaturamentoReal,
+      mesFaturamentoReal,
+      mesAnteriorFaturamentoReal,
+      /** Epoch dentro do mês anterior — só para o cliente formatar o nome do mês, sem recalcular data. */
+      mesAnteriorEpochMs: mesAnteriorRef,
 
       /** Quando o Notion falhou e estes dados são o último valor válido. */
       dadosDeEpochMs: semana.carregadoEm,

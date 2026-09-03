@@ -32,12 +32,11 @@ type RespostaAPI = DadosTV & {
   diaFaturamento: number;
   diaItensDisputados: number;
   diaAproveitamento: number;
-  semanaItensGanhos: number;
-  semanaFaturamento: number;
-  semanaItensDisputados: number;
-  semanaAproveitamento: number;
-  /** Pedidos de compra chegados na semana (Supabase) — ver components/tv/Placar.tsx. */
+  /** Pedidos de compra chegados (Supabase) — ver components/tv/Placar.tsx. null = origem indisponível. */
   semanaFaturamentoReal: number | null;
+  mesFaturamentoReal: number | null;
+  mesAnteriorFaturamentoReal: number | null;
+  mesAnteriorEpochMs: number;
 };
 
 const FETCH_MS = 60_000;
@@ -62,6 +61,7 @@ const diaAbrevSP = new Intl.DateTimeFormat("pt-BR", {
   timeZone: FUSO,
   weekday: "short",
 });
+const mesSP = new Intl.DateTimeFormat("pt-BR", { timeZone: FUSO, month: "long" });
 
 /** Na lista, itens de outro dia (não hoje) levam o dia da semana na frente — sem isso, um "09:30" de amanhã se confunde com um de hoje. */
 const formatarHora = (leilao: LeilaoTV, agoraMs: number): string => {
@@ -286,10 +286,11 @@ export function TvClient() {
           diaFaturamento={dados.diaFaturamento}
           diaItensDisputados={dados.diaItensDisputados}
           diaAproveitamento={dados.diaAproveitamento}
-          semanaItensGanhos={dados.semanaItensGanhos}
-          semanaItensDisputados={dados.semanaItensDisputados}
-          semanaAproveitamento={dados.semanaAproveitamento}
           semanaFaturamentoReal={dados.semanaFaturamentoReal}
+          mesFaturamentoReal={dados.mesFaturamentoReal}
+          mesAnteriorFaturamentoReal={dados.mesAnteriorFaturamentoReal}
+          mesAtualLabel={mesSP.format(agoraMs)}
+          mesAnteriorLabel={mesSP.format(dados.mesAnteriorEpochMs)}
         />
       ) : (
         <>
