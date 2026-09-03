@@ -11,6 +11,7 @@ import {
 } from "@/lib/visao";
 import { AudioGate } from "./AudioGate";
 import { tocarAlarme, tocarAviso } from "./beeps";
+import { Placar } from "./Placar";
 
 /**
  * Roda o dia inteiro numa TV sem ninguém por perto:
@@ -19,17 +20,30 @@ import { tocarAlarme, tocarAviso } from "./beeps";
  * - alarmes verificados no tick, com dedup que vive numa ref;
  * - reload às 4h da manhã (pega deploy novo e limpa memória acumulada);
  * - wakeLock se o Silk tiver; erro de fetch NUNCA congela a tela em silêncio.
+ * - a cada DURACAO_CONTAGEM_MS, revezamento mostra o placar (Fase 2) por
+ *   DURACAO_PLACAR_MS — suspenso durante o alerta T-10: o placar não pode
+ *   tapar o aviso visual justo quando ele mais importa.
  */
 
 type RespostaAPI = DadosTV & {
   agoraEpochMs: number;
   erro: string | null;
+  diaItensGanhos: number;
+  diaFaturamento: number;
+  diaItensDisputados: number;
+  diaAproveitamento: number;
+  semanaItensGanhos: number;
+  semanaFaturamento: number;
+  semanaItensDisputados: number;
+  semanaAproveitamento: number;
 };
 
 const FETCH_MS = 60_000;
 const DEZ_MIN_MS = 10 * 60_000;
 /** Sem resposta há mais que isto, a tela avisa mesmo sem erro explícito. */
 const LIMITE_SILENCIO_MS = 3 * 60_000;
+const DURACAO_CONTAGEM_MS = 60_000;
+const DURACAO_PLACAR_MS = 30_000;
 
 const horaSP = new Intl.DateTimeFormat("pt-BR", {
   timeZone: FUSO,
@@ -62,6 +76,7 @@ export function TvClient() {
   const [falhaFetch, setFalhaFetch] = useState<string | null>(null);
   const [audioAtivo, setAudioAtivo] = useState(false);
   const [mudo, setMudo] = useState(false);
+  const [tela, setTela] = useState<"contagem" | "placar">("contagem");
 
   /** Última resposta boa, no relógio do servidor — dispara o banner de silêncio. */
   const [ultimoOkMs, setUltimoOkMs] = useState<number | null>(null);
@@ -176,6 +191,17 @@ export function TvClient() {
     return () => clearInterval(timer);
   }, [agoraCorrigido]);
 
+  // ── Revezamento contagem/placar: a exibição (não o relógio) é suspensa
+  // durante o alerta T-10 — ver `mostrarPlacar` no render. ──
+  useEffect(() => {
+    const duracao = tela === "contagem" ? DURACAO_CONTAGEM_MS : DURACAO_PLACAR_MS;
+    const timer = setTimeout(
+      () => setTela((atual) => (atual === "contagem" ? "placar" : "contagem")),
+      duracao,
+    );
+    return () => clearTimeout(timer);
+  }, [tela]);
+
   // ── wakeLock: melhor esforço, ausência não quebra nada (Silk pode não ter) ──
   useEffect(() => {
     let sentinela: { release?: () => Promise<void> } | null = null;
@@ -239,6 +265,10 @@ export function TvClient() {
   const listaVisivel = visao.lista.slice(0, MAX_LISTA);
   const ocultos = visao.lista.length - listaVisivel.length;
 
+  // O placar nunca tapa o alerta T-10 — a exibição cede mesmo que o
+  // revezamento interno (efeito acima) continue contando em segundo plano.
+  const mostrarPlacar = tela === "placar" && !emAlerta;
+
   return (
     <main className={`tv${emAlerta ? " tv--alerta" : ""}`}>
       {problema && ultimoOkMs !== null && (
@@ -248,55 +278,70 @@ export function TvClient() {
         </div>
       )}
 
-      <section className="hero">
-        {hero ? (
-          <>
-            <p className="hero__rotulo">
-              {visao.heroEhDeHoje
-                ? agoraMesmo
-                  ? "PREGÃO ABRINDO"
-                  : "PRÓXIMO PREGÃO"
-                : `PRÓXIMO PREGÃO — ${hero.epochMs ? diaSP.format(hero.epochMs) : "data a confirmar"}`}
-            </p>
-            <p className="hero__contagem">
-              {hero.semHora || faltamMs === null
-                ? "—:—:—"
-                : agoraMesmo
-                  ? "AGORA"
-                  : formatarContagem(faltamMs)}
-            </p>
-            <p className="hero__nome">{hero.rc ? `RC ${hero.rc}` : hero.nome}</p>
-            <p className="hero__detalhe">
-              {hero.rc ? `${hero.nome} · ` : ""}
-              {hero.semHora ? "horário não informado" : horaSP.format(hero.epochMs!)}
-              {hero.cidade ? ` · ${hero.cidade}` : ""}
-            </p>
-          </>
-        ) : (
-          <>
-            <p className="hero__rotulo">HOJE</p>
-            <p className="hero__vazio">NENHUM LEILÃO RESTANTE HOJE</p>
-          </>
-        )}
-      </section>
+      {mostrarPlacar ? (
+        <Placar
+          diaItensGanhos={dados.diaItensGanhos}
+          diaFaturamento={dados.diaFaturamento}
+          diaItensDisputados={dados.diaItensDisputados}
+          diaAproveitamento={dados.diaAproveitamento}
+          semanaItensGanhos={dados.semanaItensGanhos}
+          semanaFaturamento={dados.semanaFaturamento}
+          semanaItensDisputados={dados.semanaItensDisputados}
+          semanaAproveitamento={dados.semanaAproveitamento}
+        />
+      ) : (
+        <>
+          <section className="hero">
+            {hero ? (
+              <>
+                <p className="hero__rotulo">
+                  {visao.heroEhDeHoje
+                    ? agoraMesmo
+                      ? "PREGÃO ABRINDO"
+                      : "PRÓXIMO PREGÃO"
+                    : `PRÓXIMO PREGÃO — ${hero.epochMs ? diaSP.format(hero.epochMs) : "data a confirmar"}`}
+                </p>
+                <p className="hero__contagem">
+                  {hero.semHora || faltamMs === null
+                    ? "—:—:—"
+                    : agoraMesmo
+                      ? "AGORA"
+                      : formatarContagem(faltamMs)}
+                </p>
+                <p className="hero__nome">{hero.rc ? `RC ${hero.rc}` : hero.nome}</p>
+                <p className="hero__detalhe">
+                  {hero.rc ? `${hero.nome} · ` : ""}
+                  {hero.semHora ? "horário não informado" : horaSP.format(hero.epochMs!)}
+                  {hero.cidade ? ` · ${hero.cidade}` : ""}
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="hero__rotulo">HOJE</p>
+                <p className="hero__vazio">NENHUM LEILÃO RESTANTE HOJE</p>
+              </>
+            )}
+          </section>
 
-      <section className="lista">
-        {listaVisivel.length > 0 && (
-          <ul>
-            {listaVisivel.map((leilao) => (
-              <li key={leilao.id}>
-                <span className="lista__hora">{formatarHora(leilao, agoraMs)}</span>
-                {/* O nome já carrega a RC embutida — prefixá-la duplicaria. */}
-                <span className="lista__nome">{leilao.nome}</span>
-                <span className="lista__cidade">
-                  {leilao.semHora ? "horário não informado" : (leilao.cidade ?? "")}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-        {ocultos > 0 && <p className="lista__mais">+{ocultos} mais tarde</p>}
-      </section>
+          <section className="lista">
+            {listaVisivel.length > 0 && (
+              <ul>
+                {listaVisivel.map((leilao) => (
+                  <li key={leilao.id}>
+                    <span className="lista__hora">{formatarHora(leilao, agoraMs)}</span>
+                    {/* O nome já carrega a RC embutida — prefixá-la duplicaria. */}
+                    <span className="lista__nome">{leilao.nome}</span>
+                    <span className="lista__cidade">
+                      {leilao.semHora ? "horário não informado" : (leilao.cidade ?? "")}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {ocultos > 0 && <p className="lista__mais">+{ocultos} mais tarde</p>}
+          </section>
+        </>
+      )}
 
       <footer className="rodape">
         <span>

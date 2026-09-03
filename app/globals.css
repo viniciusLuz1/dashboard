@@ -177,6 +177,68 @@ body {
   font-weight: 700;
 }
 
+/* ── Placar (Fase 2): alterna com a contagem, some no alerta T-10 ── */
+
+.placar {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2vh;
+}
+
+.placar__titulo {
+  text-align: center;
+  font-size: 1.9vw;
+  font-weight: 700;
+  letter-spacing: 0.35em;
+  color: var(--apagado);
+}
+
+.placar__colunas {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  gap: 3vw;
+}
+
+.placar__coluna {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 2.5vh;
+  padding: 2vh 2vw;
+  border-radius: 1.2vw;
+  background: var(--painel);
+  border: 0.15vw solid #1c2230;
+}
+
+.placar__periodo {
+  font-size: 2.2vw;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  color: var(--acento);
+}
+
+.placar__stat {
+  text-align: center;
+}
+
+.placar__valor {
+  font-size: 6vw;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.placar__rotulo {
+  font-size: 1.5vw;
+  color: var(--apagado);
+  margin-top: 0.4vh;
+}
+
 /* ── Rodapé discreto: contadores da semana ── */
 
 .rodape {
